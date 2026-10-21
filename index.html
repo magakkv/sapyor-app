@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Сапёр</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --bg2: var(--tg-theme-secondary-bg-color, #f1f3f5);
+    --text: var(--tg-theme-text-color, #1c1c1e);
+    --hint: var(--tg-theme-hint-color, #8e8e93);
+    --accent: var(--tg-theme-button-color, #2481cc);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --closed: #c9d1da;
+    --closed-hi: #dde3ea;
+    --open: var(--bg2);
+    --danger: #e5484d;
+    --ok: #30a46c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not(.tg-themed) {
+      --bg: #17212b; --bg2: #232e3c; --text: #f5f5f5; --hint: #7f91a4;
+      --accent: #5288c1; --closed: #3b4b5d; --closed-hi: #465870;
+    }
+  }
+  .dark-tg { --closed: #3b4b5d; --closed-hi: #465870; }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    padding: 12px 8px calc(16px + env(safe-area-inset-bottom)); user-select: none; -webkit-user-select: none;
+    touch-action: manipulation; overscroll-behavior: none; }
+
+  h1 { font-size: 20px; margin: 4px 0 10px; }
+
+  .levels { display: flex; gap: 6px; background: var(--bg2); padding: 4px; border-radius: 12px; margin-bottom: 10px; }
+  .levels button { border: 0; background: transparent; color: var(--text); padding: 8px 12px; border-radius: 9px;
+    font-size: 14px; font-weight: 600; cursor: pointer; }
+  .levels button.active { background: var(--accent); color: var(--accent-text); }
+
+  .stats { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; max-width: 420px;
+    margin-bottom: 10px; }
+  .stat { background: var(--bg2); border-radius: 12px; padding: 8px 12px; font-size: 16px; font-weight: 700;
+    min-width: 74px; text-align: center; font-variant-numeric: tabular-nums; }
+  .btn { border: 0; background: var(--bg2); color: var(--text); border-radius: 12px; padding: 8px 12px; font-size: 18px;
+    cursor: pointer; line-height: 1; }
+  .btn.on { background: var(--accent); color: var(--accent-text); }
+  .btn:active { transform: scale(0.95); }
+
+  .board-wrap { background: var(--bg2); padding: 6px; border-radius: 14px; }
+  .board { display: grid; gap: 2px; }
+  .cell { display: flex; align-items: center; justify-content: center; border-radius: 6px; font-weight: 800;
+    background: var(--closed); box-shadow: inset 0 -2px 0 rgba(0,0,0,.12), inset 0 2px 0 var(--closed-hi);
+    cursor: pointer; transition: background .12s, transform .08s; overflow: hidden; line-height: 1; }
+  .cell:active:not(.open) { transform: scale(.92); }
+  .cell.open { background: var(--bg); box-shadow: inset 0 0 0 1px rgba(128,128,128,.15); cursor: default; }
+  .cell.boom { background: var(--danger); }
+  .cell.wrong { background: #f4c7c9; }
+  .n1 { color: #2f7de1; } .n2 { color: #2f9e5b; } .n3 { color: #e5484d; } .n4 { color: #6e56cf; }
+  .n5 { color: #b5651d; } .n6 { color: #12a594; } .n7 { color: #444; } .n8 { color: #888; }
+
+  .hint { color: var(--hint); font-size: 13px; text-align: center; margin: 10px 8px 0; max-width: 380px; }
+
+  .result { margin-top: 12px; text-align: center; display: none; flex-direction: column; align-items: center; gap: 8px; }
+  .result.show { display: flex; }
+  .result .title { font-size: 20px; font-weight: 800; }
+  .result .sub { color: var(--hint); font-size: 14px; }
+  .primary { border: 0; background: var(--accent); color: var(--accent-text); padding: 12px 24px; border-radius: 12px;
+    font-size: 16px; font-weight: 700; cursor: pointer; }
+  .primary:active { transform: scale(.
