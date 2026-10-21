@@ -1,0 +1,346 @@
+:root {
+  --bg: var(--tg-theme-bg-color, #ffffff);
+  --bg2: var(--tg-theme-secondary-bg-color, #f1f3f5);
+  --text: var(--tg-theme-text-color, #1c1c1e);
+  --hint: var(--tg-theme-hint-color, #8e8e93);
+  --accent: var(--tg-theme-button-color, #2481cc);
+  --accent-text: var(--tg-theme-button-text-color, #ffffff);
+  --closed: #c9d1da;
+  --closed-hi: #dde3ea;
+  --danger: #e5484d;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.tg-themed) {
+    --bg: #17212b; --bg2: #232e3c; --text: #f5f5f5; --hint: #7f91a4;
+    --accent: #5288c1; --closed: #3b4b5d; --closed-hi: #465870;
+  }
+}
+.dark-tg { --closed: #3b4b5d; --closed-hi: #465870; }
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+body { min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+  padding: 12px 8px calc(16px + env(safe-area-inset-bottom)); user-select: none; -webkit-user-select: none;
+  touch-action: manipulation; overscroll-behavior: none; }
+
+h1 { font-size: 20px; margin: 4px 0 10px; }
+
+.levels { display: flex; gap: 6px; background: var(--bg2); padding: 4px; border-radius: 12px; margin-bottom: 10px; }
+.levels button { border: 0; background: transparent; color: var(--text); padding: 8px 12px; border-radius: 9px;
+  font-size: 14px; font-weight: 600; cursor: pointer; }
+.levels button.active { background: var(--accent); color: var(--accent-text); }
+
+.stats { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; max-width: 420px;
+  margin-bottom: 10px; }
+.stat { background: var(--bg2); border-radius: 12px; padding: 8px 12px; font-size: 16px; font-weight: 700;
+  min-width: 74px; text-align: center; font-variant-numeric: tabular-nums; }
+.btn { border: 0; background: var(--bg2); color: var(--text); border-radius: 12px; padding: 8px 12px; font-size: 18px;
+  cursor: pointer; line-height: 1; }
+.btn.on { background: var(--accent); color: var(--accent-text); }
+.btn:active { transform: scale(0.95); }
+
+.board-wrap { background: var(--bg2); padding: 6px; border-radius: 14px; }
+.board { display: grid; gap: 2px; }
+.cell { display: flex; align-items: center; justify-content: center; border-radius: 6px; font-weight: 800;
+  background: var(--closed); box-shadow: inset 0 -2px 0 rgba(0,0,0,.12), inset 0 2px 0 var(--closed-hi);
+  cursor: pointer; transition: background .12s, transform .08s; overflow: hidden; line-height: 1; }
+.cell:active:not(.open) { transform: scale(.92); }
+.cell.open { background: var(--bg); box-shadow: inset 0 0 0 1px rgba(128,128,128,.15); cursor: default; }
+.cell.boom { background: var(--danger); }
+.cell.wrong { background: #f4c7c9; }
+.n1 { color: #2f7de1; } .n2 { color: #2f9e5b; } .n3 { color: #e5484d; } .n4 { color: #6e56cf; }
+.n5 { color: #b5651d; } .n6 { color: #12a594; } .n7 { color: #444; } .n8 { color: #888; }
+
+.hint { color: var(--hint); font-size: 13px; text-align: center; margin: 10px 8px 0; max-width: 380px; }
+
+.result { margin-top: 12px; text-align: center; display: none; flex-direction: column; align-items: center; gap: 8px; }
+.result.show { display: flex; }
+.result .title { font-size: 20px; font-weight: 800; }
+.result .sub { color: var(--hint); font-size: 14px; }
+.primary { border: 0; background: var(--accent); color: var(--accent-text); padding: 12px 24px; border-radius: 12px;
+  font-size: 16px; font-weight: 700; cursor: pointer; }
+.primary:active { transform: scale(.97); }
+var tg = window.Telegram && window.Telegram.WebApp;
+if (tg) {
+  try {
+    tg.ready();
+    tg.expand();
+    document.documentElement.classList.add("tg-themed");
+    if (tg.colorScheme === "dark") document.documentElement.classList.add("dark-tg");
+  } catch (e) {}
+}
+function haptic(kind, style) {
+  try {
+    if (!tg || !tg.HapticFeedback) return;
+    if (kind === "impact") tg.HapticFeedback.impactOccurred(style || "light");
+    else if (kind === "notify") tg.HapticFeedback.notificationOccurred(style);
+    else if (kind === "select") tg.HapticFeedback.selectionChanged();
+  } catch (e) {}
+}
+
+var LEVELS = {
+  easy:   { name: "Лёгкий",  cols: 9,  rows: 9,  mines: 10 },
+  medium: { name: "Средний", cols: 10, rows: 14, mines: 25 },
+  hard:   { name: "Сложный", cols: 12, rows: 16, mines: 40 }
+};
+var NUM_COLORS = ["", "n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8"];
+
+var $ = function (id) { return document.getElementById(id); };
+var boardEl = $("board"), minesEl = $("mines"), timeEl = $("time"), modeBtn = $("mode"),
+    resultEl = $("result"), rtitle = $("rtitle"), rsub = $("rsub");
+
+var levelKey = "easy";
+try { var saved = localStorage.getItem("ms_level"); if (saved && LEVELS[saved]) levelKey = saved; } catch (e) {}
+
+var g = null;          // состояние игры
+var cellEls = [];
+var flagMode = false;
+
+function getBest(key) {
+  try { var v = localStorage.getItem("ms_best_" + key); return v ? parseInt(v, 10) : null; } catch (e) { return null; }
+}
+function setBest(key, v) {
+  try { localStorage.setItem("ms_best_" + key, String(v)); } catch (e) {}
+}
+
+function renderLevels() {
+  var box = $("levels");
+  box.innerHTML = "";
+  Object.keys(LEVELS).forEach(function (k) {
+    var b = document.createElement("button");
+    b.textContent = LEVELS[k].name;
+    if (k === levelKey) b.className = "active";
+    b.onclick = function () {
+      levelKey = k;
+      try { localStorage.setItem("ms_level", k); } catch (e) {}
+      renderLevels();
+      newGame();
+      haptic("select");
+    };
+    box.appendChild(b);
+  });
+}
+
+function idx(r, c) { return r * g.cols + c; }
+function neighbors(i) {
+  var r = Math.floor(i / g.cols), c = i % g.cols, out = [];
+  for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) {
+    if (!dr && !dc) continue;
+    var nr = r + dr, nc = c + dc;
+    if (nr >= 0 && nr < g.rows && nc >= 0 && nc < g.cols) out.push(idx(nr, nc));
+  }
+  return out;
+}
+
+function newGame() {
+  stopTimer();
+  var L = LEVELS[levelKey];
+  g = {
+    cols: L.cols, rows: L.rows, mines: L.mines,
+    cells: [], started: false, over: false, won: false,
+    opened: 0, flags: 0, seconds: 0, timer: null, hit: -1
+  };
+  for (var i = 0; i < L.cols * L.rows; i++) g.cells.push({ mine: false, open: false, flag: false, n: 0 });
+  resultEl.className = "result";
+  buildBoard();
+  updateStats();
+}
+function buildBoard() {
+  var wrapW = Math.min(window.innerWidth, 440) - 28;
+  var size = Math.max(22, Math.min(46, Math.floor((wrapW - (g.cols - 1) * 2) / g.cols)));
+  boardEl.style.gridTemplateColumns = "repeat(" + g.cols + ", " + size + "px)";
+  boardEl.style.gridAutoRows = size + "px";
+  boardEl.style.fontSize = Math.round(size * 0.55) + "px";
+  boardEl.innerHTML = "";
+  cellEls = [];
+  for (var i = 0; i < g.cells.length; i++) {
+    var d = document.createElement("div");
+    d.className = "cell";
+    d.dataset.i = i;
+    boardEl.appendChild(d);
+    cellEls.push(d);
+  }
+}
+
+function placeMines(safe) {
+  var forbidden = {};
+  forbidden[safe] = true;
+  neighbors(safe).forEach(function (n) { forbidden[n] = true; });
+  var pool = [];
+  for (var i = 0; i < g.cells.length; i++) if (!forbidden[i]) pool.push(i);
+  for (var k = pool.length - 1; k > 0; k--) {
+    var j = Math.floor(Math.random() * (k + 1));
+    var t = pool[k]; pool[k] = pool[j]; pool[j] = t;
+  }
+  pool.slice(0, g.mines).forEach(function (i) { g.cells[i].mine = true; });
+  for (var m = 0; m < g.cells.length; m++) {
+    g.cells[m].n = neighbors(m).filter(function (x) { return g.cells[x].mine; }).length;
+  }
+  g.started = true;
+  startTimer();
+}
+
+function startTimer() {
+  g.timer = setInterval(function () { g.seconds++; updateStats(); }, 1000);
+}
+function stopTimer() {
+  if (g && g.timer) { clearInterval(g.timer); g.timer = null; }
+}
+
+function openCell(i) {
+  var c = g.cells[i];
+  if (g.over || c.open || c.flag) return;
+  if (!g.started) placeMines(i);
+  if (c.mine) { lose(i); return; }
+  var stack = [i];
+  while (stack.length) {
+    var cur = stack.pop(), cc = g.cells[cur];
+    if (cc.open || cc.flag) continue;
+    cc.open = true; g.opened++;
+    if (cc.n === 0) neighbors(cur).forEach(function (n) { if (!g.cells[n].open && !g.cells[n].flag) stack.push(n); });
+  }
+  if (g.opened === g.cells.length - g.mines) win();
+}
+
+function toggleFlag(i) {
+  var c = g.cells[i];
+  if (g.over || c.open) return;
+  if (!c.flag && g.flags >= g.mines) { haptic("notify", "warning"); return; }
+  c.flag = !c.flag;
+  g.flags += c.flag ? 1 : -1;
+  haptic("impact", "medium");
+}
+
+function chord(i) {
+  var c = g.cells[i];
+  if (!c.open || c.n === 0) return;
+  var nb = neighbors(i);
+  var f = nb.filter(function (x) { return g.cells[x].flag; }).length;
+  if (f !== c.n) return;
+  nb.forEach(function (x) { if (!g.over) openCell(x); });
+}
+
+function lose(i) {
+  g.over = true; g.hit = i;
+  stopTimer();
+  haptic("notify", "error");
+  rtitle.textContent = "💥 Бум!";
+  rsub.textContent = "Время: " + g.seconds + " с";
+  resultEl.className = "result show";
+}
+
+function win() {
+  g.over = true; g.won = true;
+  stopTimer();
+  haptic("notify", "success");
+  var best = getBest(levelKey), isNew = best === null || g.seconds < best;
+  if (isNew) setBest(levelKey, g.seconds);
+  rtitle.textContent = "🏆 Победа!";
+  rsub.textContent = "Время: " + g.seconds + " с" + (isNew ? " — новый рекорд!" : " · рекорд: " + best + " с");
+  resultEl.className = "result show";
+}
+function updateStats() {
+  minesEl.textContent = "💣 " + (g.mines - g.flags);
+  timeEl.textContent = "⏱ " + g.seconds;
+  modeBtn.className = "btn" + (flagMode ? " on" : "");
+  modeBtn.textContent = flagMode ? "🚩" : "⛏";
+  var best = getBest(levelKey);
+  document.title = "Сапёр" + (best !== null ? " · рекорд " + best + " с" : "");
+  for (var i = 0; i < g.cells.length; i++) paint(i);
+}
+
+function paint(i) {
+  var c = g.cells[i], el = cellEls[i], cls = "cell", txt = "";
+  if (g.over) {
+    if (i === g.hit) { cls += " open boom"; txt = "💥"; }
+    else if (c.mine) { cls += " open"; txt = g.won || c.flag ? "🚩" : "💣"; }
+    else if (c.flag) { cls += " open wrong"; txt = "❌"; }
+    else if (c.open) { cls += " open"; if (c.n) { cls += " " + NUM_COLORS[c.n]; txt = c.n; } }
+  } else if (c.open) {
+    cls += " open";
+    if (c.n) { cls += " " + NUM_COLORS[c.n]; txt = c.n; }
+  } else if (c.flag) {
+    txt = "🚩";
+  }
+  if (el.className !== cls) el.className = cls;
+  if (el.textContent !== String(txt)) el.textContent = txt;
+}
+
+// Управление: тап — открыть/флаг (по режиму), долгое нажатие — флаг
+var press = null;
+boardEl.addEventListener("pointerdown", function (e) {
+  var el = e.target.closest(".cell");
+  if (!el || g.over) return;
+  var i = parseInt(el.dataset.i, 10);
+  press = { i: i, long: false, x: e.clientX, y: e.clientY };
+  press.timer = setTimeout(function () {
+    if (!press) return;
+    press.long = true;
+    toggleFlag(i);
+    updateStats();
+  }, 420);
+});
+boardEl.addEventListener("pointermove", function (e) {
+  if (press && (Math.abs(e.clientX - press.x) > 10 || Math.abs(e.clientY - press.y) > 10)) {
+    clearTimeout(press.timer); press = null;
+  }
+});
+function endPress(e) {
+  if (!press) return;
+  clearTimeout(press.timer);
+  var p = press; press = null;
+  if (p.long || g.over) return;
+  var c = g.cells[p.i];
+  if (c.open) { chord(p.i); }
+  else if (flagMode) { toggleFlag(p.i); }
+  else { openCell(p.i); if (!g.over) haptic("impact", "light"); }
+  updateStats();
+}
+boardEl.addEventListener("pointerup", endPress);
+boardEl.addEventListener("pointercancel", function () { if (press) { clearTimeout(press.timer); press = null; } });
+boardEl.addEventListener("pointerleave", function () { if (press) { clearTimeout(press.timer); press = null; } });
+boardEl.addEventListener("contextmenu", function (e) {
+  e.preventDefault();
+  var el = e.target.closest(".cell");
+  if (el && !g.over) { toggleFlag(parseInt(el.dataset.i, 10)); updateStats(); }
+});
+
+modeBtn.onclick = function () { flagMode = !flagMode; haptic("select"); updateStats(); };
+$("restart").onclick = function () { haptic("select"); newGame(); };
+$("again").onclick = function () { newGame(); };
+
+window.addEventListener("resize", function () { if (g) { buildBoard(); updateStats(); } });
+
+renderLevels();
+newGame();
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Сапёр</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h1>💣 Сапёр</h1>
+<div class="levels" id="levels"></div>
+<div class="stats">
+<div class="stat" id="mines">💣 0</div>
+<button class="btn" id="mode">⛏</button>
+<button class="btn" id="restart">🔄</button>
+<div class="stat" id="time">⏱ 0</div>
+</div>
+<div class="board-wrap"><div class="board" id="board"></div></div>
+<div class="result" id="result">
+<div class="title" id="rtitle"></div>
+<div class="sub" id="rsub"></div>
+<button class="primary" id="again">Играть снова</button>
+</div>
+<div class="hint">Тап — открыть клетку. Долгое нажатие — флажок. Тап по цифре открывает соседние клетки, если рядом хватает флажков.</div>
+<script src="game1.js"></script>
+<script src="game2.js"></script>
+<script src="game3.js"></script>
+</body>
+</html>
